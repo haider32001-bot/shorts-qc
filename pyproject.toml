@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shorts-qc"
-version = "0.1.0"
+version = "0.2.0"
 description = "Pre-upload quality checks for YouTube Shorts: 9:16, duration, resolution, audio"
 readme = "README.md"
 license = {text = "MIT"}

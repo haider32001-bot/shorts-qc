@@ -20,8 +20,11 @@ For each file it reports PASS / FAIL for:
   (`--min-width 1080 --min-height 1920`)
 - **Frame rate** — 24 fps or higher
 - **Audio present** — at least one audio stream
-- **Audio loudness** — mean volume above -30 dB when ffprobe/ffmpeg
-  is available (warns instead of failing when loudness cannot be read)
+- **Audio loudness** — mean volume above -30 dB, measured with
+  ffmpeg `volumedetect` (warns instead of failing when loudness
+  cannot be read)
+- **Long silence** — no silent gap longer than 2 seconds, measured
+  with ffmpeg `silencedetect` (dead air is where viewers swipe away)
 
 It uses `ffprobe` when it is installed. Without `ffprobe` it still
 checks what it can from the file itself and clearly says which checks
@@ -65,7 +68,8 @@ my-short.mp4
   [PASS] frame rate: 30.0 fps
   [PASS] audio present: 1 stream(s)
   [PASS] loudness: -16.2 dB mean
-Result: PASS (6/6)
+  [PASS] long silence: longest gap 0.0s (<= 2s)
+Result: PASS (7/7)
 ```
 
 A failing file exits with code 1 and lists exactly what to fix:
@@ -73,7 +77,7 @@ A failing file exits with code 1 and lists exactly what to fix:
 ```
   [FAIL] vertical 9:16: 1920x1080 is landscape, not 9:16 vertical
   [FAIL] duration: 74.0s (> 60s)
-Result: FAIL (4/6)
+Result: FAIL (5/7)
 ```
 
 ## Why this exists
