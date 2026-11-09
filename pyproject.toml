@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shorts-qc"
+version = "0.1.0"
+description = "Pre-upload quality checks for YouTube Shorts: 9:16, duration, resolution, audio"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+authors = [{name = "shorts-qc contributors"}]
+keywords = ["youtube", "shorts", "video", "qc", "ffprobe"]
+
+[project.scripts]
+shorts-qc = "shorts_qc.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
