@@ -9,7 +9,7 @@ is missing.
 from __future__ import annotations
 
 import json
-import math
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -71,6 +71,71 @@ def check_loudness(mean_db: float | None, min_db: float = -30.0) -> CheckResult:
     if mean_db >= min_db:
         return CheckResult("loudness", True, f"{mean_db:.1f} dB mean")
     return CheckResult("loudness", False, f"{mean_db:.1f} dB mean (< {min_db:g} dB)")
+
+
+def parse_mean_volume(ffmpeg_text: str) -> float | None:
+    """Parse 'mean_volume: -16.2 dB' from ffmpeg volumedetect output."""
+    m = re.search(r"mean_volume:\s*(-?[\d.]+)\s*dB", ffmpeg_text or "")
+    if not m:
+        return None
+    try:
+        return float(m.group(1))
+    except ValueError:
+        return None
+
+
+def parse_silence_durations(ffmpeg_text: str) -> list[float]:
+    """Parse every 'silence_duration: X' from ffmpeg silencedetect output."""
+    out: list[float] = []
+    for m in re.finditer(r"silence_duration:\s*([\d.]+)", ffmpeg_text or ""):
+        try:
+            out.append(float(m.group(1)))
+        except ValueError:
+            continue
+    return out
+
+
+def check_long_silence(max_silence: float | None, max_allowed: float = 2.0) -> CheckResult:
+    """FAIL when any silent gap is longer than max_allowed seconds.
+
+    Long dead-air gaps are where viewers swipe away, and where a
+    narration sentence was cut. None means the measurement could not
+    be made, so the check is skipped rather than guessed.
+    """
+    if max_silence is None:
+        return CheckResult(
+            "long silence", True, "could not be read, skipped", skipped=True
+        )
+    if max_silence <= max_allowed:
+        return CheckResult(
+            "long silence", True, f"longest gap {max_silence:.1f}s (<= {max_allowed:g}s)"
+        )
+    return CheckResult(
+        "long silence", False, f"longest gap {max_silence:.1f}s (> {max_allowed:g}s)"
+    )
+
+
+def measure_audio(path: str) -> tuple[float | None, float | None]:
+    """Run ffmpeg volumedetect + silencedetect, return (mean_db, max_silence_s).
+
+    Returns (None, None) when ffmpeg is missing or the pass fails.
+    """
+    if shutil.which("ffmpeg") is None:
+        return None, None
+    cmd = [
+        "ffmpeg", "-i", path, "-af",
+        "volumedetect,silencedetect=noise=-40dB:d=0.5",
+        "-f", "null", "-",
+    ]
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    except (subprocess.SubprocessError, OSError):
+        return None, None
+    text = (out.stderr or "") + (out.stdout or "")
+    mean_db = parse_mean_volume(text)
+    silences = parse_silence_durations(text)
+    max_silence = max(silences) if silences else 0.0
+    return mean_db, max_silence
 
 
 def probe_file(path: str) -> dict:
@@ -139,9 +204,13 @@ def check_file(path: str, max_duration: float = 60.0,
     results.append(check_resolution(width, height, min_width, min_height))
     results.append(check_frame_rate(fps))
     results.append(check_audio_present(audio_count))
-    # Loudness needs a volumedetect pass; without it we report skipped
-    # rather than guessing from stream metadata.
-    results.append(check_loudness(None))
+    if audio_count >= 1:
+        mean_db, max_silence = measure_audio(path)
+        results.append(check_loudness(mean_db))
+        results.append(check_long_silence(max_silence))
+    else:
+        results.append(check_loudness(None))
+        results.append(check_long_silence(None))
     return results
 
 
